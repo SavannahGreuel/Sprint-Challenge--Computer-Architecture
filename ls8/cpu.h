@@ -4,6 +4,8 @@
 // Holds all information about the CPU
 struct cpu {
   // TODO
+  //stack pointer
+  unsigned int SP;
   // PC
   unsigned int PC;
   // registers (array)
@@ -13,6 +15,9 @@ struct cpu {
   //flag
   unsigned char FL;
 };
+
+#define ADDR_PROGRAM_ENTRY 0x00 // program gets loaded
+#define ADDR_EMPTY_STACK 0xF4   // sp is empty
 
 // ALU operations
 enum alu_op {

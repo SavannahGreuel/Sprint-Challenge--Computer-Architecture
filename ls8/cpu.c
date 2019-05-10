@@ -5,14 +5,16 @@
 
 #define DATA_LEN 6
 
+#define SP 7
+
 /**
  * Load the binary bytes from a .ls8 source file into a RAM array
  */
-void cpu_load(struct cpu *cpu, int argc, char *argv[])
+void cpu_load(struct cpu *cpu, int argc, char *argv[]) // make ./ls8 examples/print8.ls8
 {
   if (argc < 2)
   {
-    printf("File does not exits \n");
+    printf("File does not exist.\n");
     exit(1);
   }
 
@@ -21,17 +23,21 @@ void cpu_load(struct cpu *cpu, int argc, char *argv[])
 
   if (fp == NULL)
   {
-    printf("File does not exist \n");
+    printf("File does not exist");
     exit(1);
   }
-  else {
+  else
+  { 
     char file_line[1024];
     int address = 0;
+
     while (fgets(file_line, sizeof(file_line), fp) != NULL)
     {
       char *endptr;
-      unsigned char val = strtol(file_line, &endptr, 2);
+      unsigned char val;
+      val = strtol(file_line, &endptr, 2);
 
+      // if empty line continue
       if (file_line == NULL)
       {
         continue;
@@ -40,159 +46,170 @@ void cpu_load(struct cpu *cpu, int argc, char *argv[])
       cpu->ram[address] = val;
       address++;
     }
-
   }
+  // close file
   fclose(fp);
 }
 
-unsigned char cpu_ram_read(struct cpu *cpu, unsigned char index) 
+unsigned char cpu_ram_read(struct cpu *cpu, unsigned char index)
 {
   return cpu->ram[index];
 }
 
-unsigned char cpu_ram_write(struct cpu *cpu, int index, unsigned char value)
-{ 
-  return cpu->ram[index] = value;
+void cpu_ram_write(struct cpu *cpu, unsigned char index, unsigned char value)
+{
+  cpu->ram[index] = value;
 }
+
+// cpu push
+void push_stack(struct cpu *cpu, unsigned char value)
+{
+  cpu->registers[SP]--;
+  cpu_ram_write(cpu, cpu->registers[SP], value);
+}
+
+// cpu pop
+unsigned char pop_stack(struct cpu *cpu)
+{
+  unsigned char ret = cpu->ram[cpu->registers[SP]];
+  cpu->registers[SP]++;
+  return ret;
+}
+
+//
+
 /**
  * ALU
  */
 void alu(struct cpu *cpu, enum alu_op op, unsigned char regA, unsigned char regB)
 {
-  switch (op) {
-    case ALU_MUL:
-      cpu->registers[regA] = cpu->registers[regA] * cpu->registers[regB];
-      break;
+  switch (op)
+  {
+  case ALU_MUL:
+    // TODO
+    cpu->registers[regA] *= cpu->registers[regB];
+    break;
 
-    case ALU_ADD:
-      cpu->registers[regA] = cpu->registers[regA] + cpu->registers[regB];
-      break;
+  // TODO: implement more ALU ops
+  case ALU_ADD:
+    cpu->registers[regA] += cpu->registers[regB];
+    break;
 
-    case ALU_CMP:
-      if(cpu->registers[regA] == cpu->registers[regB])
-      {
-        cpu->FL = 1;
-      }
-      else if(cpu->registers[regA] > cpu->registers[regB])
-      {
-        cpu->FL = 0;
-      }
-
-      break;
+  case ALU_CMP:
+    if (cpu->registers[regA] == cpu->registers[regB])
+    {
+      cpu->FL = 1;
+    }
+    else if (cpu->registers[regA] > cpu->registers[regB])
+    {
+      cpu->FL = 0;
+    }
+    break;
   }
 }
-
-void push_stack(struct cpu *cpu, int val)
-{
-  cpu->registers[7]--;
-  cpu_ram_write(cpu, cpu->registers[7], val);
-}
-
-unsigned char pop_stack(struct cpu *cpu)
-{
-  unsigned char val = cpu->ram[cpu->registers[7]];
-  cpu->registers[7]++;
-  return val;
-}
-    // TODO: implement more ALU ops
-  
 
 /**
  * Run the CPU
  */
 void cpu_run(struct cpu *cpu)
 {
-  int running = 1; // True until we get a HLT instruction
-
+  int running = 1; // True until we get a HLT INSTRUCTIONS
+  // create ops
   unsigned char operandA;
   unsigned char operandB;
 
-  while (running) {
+  while (running)
+  {
     // TODO
-    // 1. Get the value of the current instruction (in address PC).
+
+    // 1. Get the value of the current INSTRUCTIONS (in address PC).
     unsigned char INSTRUCTIONS = cpu->ram[cpu->PC];
-    // 2. Figure out how many operands this next instruction requires
+
+    // 2. Figure out how many operands this next INSTRUCTIONS requires
     unsigned int num_operands = INSTRUCTIONS >> 6;
-    // 3. Get the appropriate value(s) of the operands following this instruction
+
+    // 3. Get the appropriate value(s) of the operands following this INSTRUCTIONS
     if (num_operands == 2)
     {
       operandA = cpu_ram_read(cpu, (cpu->PC + 1) & 0xff);
       operandB = cpu_ram_read(cpu, (cpu->PC + 2) & 0xff);
-
     }
     else if (num_operands == 1)
     {
       operandA = cpu_ram_read(cpu, (cpu->PC + 1) & 0xff);
     }
+
     // 4. switch() over it to decide on a course of action.
     switch (INSTRUCTIONS)
     {
-      case HLT:
-        running = 0;
-        break;
+    case HLT:
+      running = 0;
+      break;
 
-      case LDI:
-        cpu->registers[operandA] = operandB;
-        break;
-    
-      case PRN:
-        printf("%d\n", cpu->registers[operandA]);
-        break;
+    case PRN:
+      printf("%d\n", cpu->registers[operandA]);
+      break;
 
-      case MUL:
-        alu(cpu, ALU_MUL, operandA, operandB);
-        break;
+    case LDI:
+      cpu->registers[operandA] = operandB;
+      break;
 
-      case PUSH:
-        push_stack(cpu, cpu->registers[operandA]);
-        break;
+    case MUL:
+      alu(cpu, ALU_MUL, operandA, operandB);
+      break;
 
-      case POP:
-        cpu->registers[operandA] = pop_stack(cpu);
-        break;
+    case PUSH:
+      push_stack(cpu, cpu->registers[operandA]);
+      break;
 
-      case CALL:
-        push_stack(cpu, cpu->PC + 1);
-        cpu->PC = cpu->registers[operandA] - 1;
-        break;
+    case POP:
+      cpu->registers[operandA] = pop_stack(cpu);
+      break;
 
-      case RET:
-        cpu->PC = pop_stack(cpu);
-        break;
+    case ADD:
+      alu(cpu, ALU_ADD, operandA, operandB);
+      break;
 
-      case ADD:
-        alu(cpu, ALU_ADD, operandA, operandB);
-        break;
+    case CALL:
+      push_stack(cpu, cpu->PC + 1);
+      cpu->PC = cpu->registers[operandA] - 1;
+      break;
 
-      case CMP:
-        alu(cpu, ALU_CMP, operandA, operandB);
-        break;
+    case RET:
+      cpu->PC = pop_stack(cpu);
+      break;
 
-      case JMP:
+    case CMP:
+      alu(cpu, ALU_CMP, operandA, operandB);
+      break;
+
+    case JMP:
+      cpu->PC = cpu->registers[operandA];
+      cpu->PC += 1;
+      break;
+
+    case JEQ:
+      if (cpu->FL == 1)
+      {
         cpu->PC = cpu->registers[operandA];
-        cpu->PC += 1;
-        break;
+        cpu->PC -= 1;
+      }
+      break;
 
-      case JEQ:
-        if (cpu->FL == 1)
-        {
-          cpu->PC = cpu->registers[operandA];
-        }
-        break;
-
-      case JNE:
-        if (cpu->FL != 1)
-        {
-          cpu->PC = cpu->registers[operandA];
-        }
-        break;
-
-      default:
-        break;
+    case JNE:
+      if (cpu->FL != 1)
+      {
+        cpu->PC = cpu->registers[operandA];
+        cpu->PC -= 1;
+      }
+      break;
+      
+    default:
+      break;
     }
-    // 5. Do whatever the instruction should do according to the spec.
-    // 6. Move the PC to the next instruction.
-    cpu->PC +=num_operands + 1;
+    // 5. Do whatever the INSTRUCTIONS should do according to the spec.
+    // 6. Move the PC to the next INSTRUCTIONS.
+    cpu->PC += num_operands + 1;
   }
 }
 
@@ -201,12 +218,13 @@ void cpu_run(struct cpu *cpu)
  */
 void cpu_init(struct cpu *cpu)
 {
-  // TODO: Initialize the PC and other special registers
+  // TODO: Initialize the PC and other special registersisters
+  // set all values to 0
   cpu->PC = 0;
   cpu->FL = 0;
-  memset(cpu->ram, 0, sizeof(cpu->ram));
-  memset(cpu->registers, 0 , sizeof(cpu->registers));
 
-  int total = sizeof(cpu->ram) / sizeof(unsigned char);
-  cpu->registers[7] = total;
+  cpu->registers[SP] = ADDR_EMPTY_STACK;
+
+  memset(cpu->registers, 0, sizeof(cpu->registers));
+  memset(cpu->ram, 0, sizeof(cpu->ram));
 }
